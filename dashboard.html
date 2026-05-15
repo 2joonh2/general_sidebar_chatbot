@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S&P 500 Top 10 Dashboard</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select {
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            outline: none;
+            width: 250px;
+        }
+        .chart-container {
+            position: relative;
+            height: 50vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📊 S&P 500 Top 10 주식 대시보드</h1>
+    
+    <div class="controls">
+        <label for="stockSelect"><strong>종목 선택:</strong> </label>
+        <select id="stockSelect">
+            <option value="AAPL">Apple (AAPL)</option>
+            <option value="MSFT">Microsoft (MSFT)</option>
+            <option value="GOOGL">Alphabet (GOOGL)</option>
+            <option value="AMZN">Amazon (AMZN)</option>
+            <option value="NVDA">NVIDIA (NVDA)</option>
+            <option value="META">Meta (META)</option>
+            <option value="TSLA">Tesla (TSLA)</option>
+            <option value="BRK.B">Berkshire Hathaway (BRK.B)</option>
+            <option value="LLY">Eli Lilly (LLY)</option>
+            <option value="AVGO">Broadcom (AVGO)</option>
+        </select>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="stockChart"></canvas>
+    </div>
+</div>
+
+<script>
+    // 1. 임의의 주가 데이터를 생성하는 함수 (프로토타입용)
+    function generateDummyData(basePrice) {
+        let currentPrice = basePrice;
+        const data = [];
+        for (let i = 0; i < 30; i++) { // 30일치 데이터
+            const change = (Math.random() - 0.5) * (basePrice * 0.05); // 최대 5% 변동
+            currentPrice += change;
+            data.push(currentPrice.toFixed(2));
+        }
+        return data;
+    }
+
+    // 종목별 기준 가격 설정
+    const stockBasePrices = {
+        'AAPL': 170,
+        'MSFT': 400,
+        'GOOGL': 150,
+        'AMZN': 180,
+        'NVDA': 900,
+        'META': 500,
+        'TSLA': 170,
+        'BRK.B': 400,
+        'LLY': 750,
+        'AVGO': 1300
+    };
+
+    // 최근 30일 라벨 생성
+    const labels = Array.from({length: 30}, (_, i) => `Day ${i + 1}`);
+
+    // 2. Chart.js 초기화
+    const ctx = document.getElementById('stockChart').getContext('2d');
+    let stockChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Apple (AAPL) 주가',
+                data: generateDummyData(stockBasePrices['AAPL']),
+                borderColor: '#3498db',
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false
+                }
+            }
+        }
+    });
+
+    // 3. 차트 업데이트 함수
+    function updateChart(ticker) {
+        const basePrice = stockBasePrices[ticker] || 100;
+        const selectElement = document.getElementById('stockSelect');
+        
+        // select 텍스트 가져오기
+        let stockName = ticker;
+        for (let option of selectElement.options) {
+            if (option.value === ticker) {
+                stockName = option.text;
+                break;
+            }
+        }
+
+        // 차트 데이터 갱신
+        stockChart.data.datasets[0].label = `${stockName} 주가`;
+        stockChart.data.datasets[0].data = generateDummyData(basePrice);
+        stockChart.update();
+    }
+
+    // 4. 드롭다운 변경 이벤트 리스너
+    document.getElementById('stockSelect').addEventListener('change', function(e) {
+        updateChart(e.target.value);
+    });
+
+    // ==========================================
+    // 5. 챗봇을 위한 전역 API (Adapter) 노출
+    // ==========================================
+    window.DashboardAPI = {
+        /**
+         * 챗봇에서 주식을 변경할 때 호출할 함수
+         * @param {string} ticker 종목 코드 (예: 'AAPL', 'MSFT')
+         */
+        changeStock: function(ticker) {
+            const selectElement = document.getElementById('stockSelect');
+            
+            // 유효한 종목 코드인지 확인
+            if (stockBasePrices[ticker]) {
+                selectElement.value = ticker; // UI(드롭다운) 값 변경
+                updateChart(ticker);          // 차트 업데이트
+                console.log(`[DashboardAPI] Stock changed to ${ticker}`);
+                return true;
+            } else {
+                console.warn(`[DashboardAPI] Invalid ticker: ${ticker}`);
+                return false;
+            }
+        }
+    };
+</script>
+
+</body>
+</html>

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S&P 500 AI Dashboard</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- 챗봇 스타일 연동 (Phase 2) -->
+    <link rel="stylesheet" href="chatbot.css">
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select {
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            outline: none;
+            width: 250px;
+        }
+        .prompt-settings {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #eef2f5;
+            border-radius: 8px;
+            border: 1px solid #dcdcdc;
+        }
+        .prompt-settings h3 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #34495e;
+        }
+        .chart-container {
+            position: relative;
+            height: 50vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📊 S&P 500 Top 10 주식 대시보드 (with AI Chatbot)</h1>
+    
+    <div class="controls">
+        <label for="stockSelect"><strong>종목 선택:</strong> </label>
+        <select id="stockSelect">
+            <option value="AAPL">Apple (AAPL)</option>
+            <option value="MSFT">Microsoft (MSFT)</option>
+            <option value="GOOGL">Alphabet (GOOGL)</option>
+            <option value="AMZN">Amazon (AMZN)</option>
+            <option value="NVDA">NVIDIA (NVDA)</option>
+            <option value="META">Meta (META)</option>
+            <option value="TSLA">Tesla (TSLA)</option>
+            <option value="BRK.B">Berkshire Hathaway (BRK.B)</option>
+            <option value="LLY">Eli Lilly (LLY)</option>
+            <option value="AVGO">Broadcom (AVGO)</option>
+        </select>
+    </div>
+
+    <!-- 챗봇 시스템 프롬프트 설정 UI -->
+    <div class="prompt-settings">
+        <h3>⚙️ 챗봇 시스템 프롬프트 설정 (일반 사용자 편집용)</h3>
+        <textarea id="systemPromptInput" style="width: 100%; height: 100px; padding: 10px; font-family: inherit; border: 1px solid #ccc; border-radius: 5px; resize: vertical; box-sizing: border-box;"></textarea>
+        <div style="margin-top: 10px;">
+            <button id="savePromptBtn" style="padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">프롬프트 적용</button>
+            <span id="promptSaveMsg" style="color: #27ae60; font-weight: bold; margin-left: 10px; display: none;">✅ 적용되었습니다.</span>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="stockChart"></canvas>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- 1. 기존 대시보드 로직 (Phase 1)                -->
+<!-- ============================================== -->
+<script>
+    function generateDummyData(basePrice) {
+        let currentPrice = basePrice;
+        const data = [];
+        for (let i = 0; i < 30; i++) {
+            const change = (Math.random() - 0.5) * (basePrice * 0.05);
+            currentPrice += change;
+            data.push(currentPrice.toFixed(2));
+        }
+        return data;
+    }
+
+    const stockBasePrices = {
+        'AAPL': 170, 'MSFT': 400, 'GOOGL': 150, 'AMZN': 180,
+        'NVDA': 900, 'META': 500, 'TSLA': 170, 'BRK.B': 400,
+        'LLY': 750, 'AVGO': 1300
+    };
+
+    const labels = Array.from({length: 30}, (_, i) => `Day ${i + 1}`);
+
+    const ctx = document.getElementById('stockChart').getContext('2d');
+    let stockChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Apple (AAPL) 주가',
+                data: generateDummyData(stockBasePrices['AAPL']),
+                borderColor: '#3498db',
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    function updateChart(ticker) {
+        const basePrice = stockBasePrices[ticker] || 100;
+        const selectElement = document.getElementById('stockSelect');
+        
+        let stockName = ticker;
+        for (let option of selectElement.options) {
+            if (option.value === ticker) {
+                stockName = option.text;
+                break;
+            }
+        }
+
+        stockChart.data.datasets[0].label = `${stockName} 주가`;
+        stockChart.data.datasets[0].data = generateDummyData(basePrice);
+        stockChart.update();
+    }
+
+    document.getElementById('stockSelect').addEventListener('change', function(e) {
+        updateChart(e.target.value);
+    });
+
+    // 챗봇 어댑터 (전역 함수 노출)
+    window.DashboardAPI = {
+        changeStock: function(ticker) {
+            const selectElement = document.getElementById('stockSelect');
+            if (stockBasePrices[ticker]) {
+                selectElement.value = ticker;
+                updateChart(ticker);
+                return true;
+            }
+            return false;
+        },
+        getCurrentData: function() {
+            return {
+                label: stockChart.data.datasets[0].label,
+                data: stockChart.data.datasets[0].data
+            };
+        }
+    };
+</script>
+
+<!-- ============================================== -->
+<!-- 2. 챗봇 연동 및 초기화 (Phase 3)               -->
+<!-- ============================================== -->
+<script src="chatbot.js"></script>
+<script>
+    // 페이지 로드 시 챗봇 초기화
+    window.addEventListener('DOMContentLoaded', () => {
+        
+        // 1. Gemini 프로바이더 생성 (발급받은 API 키 입력)
+        const geminiProvider = new GeminiLlmProvider({
+            apiKey: 'AIzaSyCm3yBFjXDuTDJ5A1vGt-30G88zET21gOk', // 사용자의 API 키
+            model: 'gemini-2.5-flash'
+        });
+
+        // 2. 챗봇 인스턴스 생성 및 대시보드 API 맵핑
+        const bot = new DashboardChatbot({
+            llmProvider: geminiProvider,
+            actions: {
+                // 단순 뷰 변경
+                'changeStock': (params) => {
+                    window.DashboardAPI.changeStock(params.ticker);
+                },
+                // 뷰 변경 후 데이터 분석
+                'analyzeStock': async (params) => {
+                    // 1. 뷰 변경 (조회 조건 설정 = DB 쿼리 실행 효과)
+                    window.DashboardAPI.changeStock(params.ticker);
+                    
+                    // 2. 현재 뷰의 데이터 읽어오기 (DB 조회 결과물)
+                    const dbData = window.DashboardAPI.getCurrentData();
+                    
+                    // 3. 로딩 메시지 표시
+                    const loadingBubble = bot.appendMessage('bot loading', 'DB에서 데이터를 읽어와 분석 중입니다...');
+                    
+                    // 4. LLM에 데이터 분석 요청
+                    const analysisText = await geminiProvider.generateAnalysis(dbData);
+                    
+                    // 5. 로딩 메시지 제거 후 결과 반환
+                    bot.messages.removeChild(loadingBubble);
+                    return analysisText; // 반환된 텍스트가 최종 응답으로 채팅창에 뜹니다.
+                }
+            }
+        });
+
+        // 3. 시스템 프롬프트 설정 UI 연동
+        const promptInput = document.getElementById('systemPromptInput');
+        const saveBtn = document.getElementById('savePromptBtn');
+        const saveMsg = document.getElementById('promptSaveMsg');
+
+        // 초기 프롬프트 값을 텍스트 박스에 채워넣기
+        promptInput.value = geminiProvider.systemPrompt;
+
+        // 적용 버튼 클릭 시 프롬프트 업데이트
+        saveBtn.addEventListener('click', () => {
+            geminiProvider.setSystemPrompt(promptInput.value);
+            
+            // 성공 메시지 잠시 보여주기
+            saveMsg.style.display = 'inline';
+            setTimeout(() => {
+                saveMsg.style.display = 'none';
+            }, 2000);
+        });
+    });
+</script>
+
+</body>
+</html>
