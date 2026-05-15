@@ -61,85 +61,120 @@
             <option value="META">Meta (META)</option>
             <option value="TSLA">Tesla (TSLA)</option>
             <option value="BRK.B">Berkshire Hathaway (BRK.B)</option>
-            <option value="LLY">Eli Lilly (LLY)</option>
+            <option value="WMT">Walmart (WMT)</option>
             <option value="AVGO">Broadcom (AVGO)</option>
         </select>
     </div>
 
     <div class="chart-container">
         <canvas id="stockChart"></canvas>
+        <div id="fallbackUI" style="display: none; text-align: center; padding-top: 50px; background: #fff;">
+            <h3 style="color: #e74c3c; margin-bottom: 10px;">⚠️ 데이터 로드 실패 (CORS 정책)</h3>
+            <p style="margin-bottom: 15px;">브라우저 보안 정책으로 인해 로컬(file://) 환경에서 자동으로 CSV를 읽을 수 없습니다.<br>VS Code Live Server를 사용하시거나, 아래 버튼을 눌러 직접 CSV 파일을 선택해주세요.</p>
+            <input type="file" id="csvFileInput" accept=".csv" style="width: auto; padding: 5px;" />
+        </div>
     </div>
 </div>
 
 <script>
-    // 1. 임의의 주가 데이터를 생성하는 함수 (프로토타입용)
-    function generateDummyData(basePrice) {
-        let currentPrice = basePrice;
-        const data = [];
-        for (let i = 0; i < 30; i++) { // 30일치 데이터
-            const change = (Math.random() - 0.5) * (basePrice * 0.05); // 최대 5% 변동
-            currentPrice += change;
-            data.push(currentPrice.toFixed(2));
+    let globalCsvData = { dates: [], stocks: {} };
+    let stockChart = null;
+
+    function parseCSVText(csvText) {
+        const rows = csvText.trim().split('\n');
+        const headers = rows[0].split(',').map(h => h.trim());
+        
+        globalCsvData.dates = [];
+        headers.forEach((header, index) => {
+            if (index > 0) {
+                globalCsvData.stocks[header] = [];
+            }
+        });
+
+        for (let i = 1; i < rows.length; i++) {
+            const cols = rows[i].split(',');
+            if (cols.length === headers.length) {
+                globalCsvData.dates.push(cols[0].trim());
+                headers.forEach((header, index) => {
+                    if (index > 0) {
+                        globalCsvData.stocks[header].push(parseFloat(cols[index]));
+                    }
+                });
+            }
         }
-        return data;
+        
+        initChart();
     }
 
-    // 종목별 기준 가격 설정
-    const stockBasePrices = {
-        'AAPL': 170,
-        'MSFT': 400,
-        'GOOGL': 150,
-        'AMZN': 180,
-        'NVDA': 900,
-        'META': 500,
-        'TSLA': 170,
-        'BRK.B': 400,
-        'LLY': 750,
-        'AVGO': 1300
-    };
+    // CSV 데이터 로드 및 파싱
+    async function loadCSV() {
+        try {
+            const response = await fetch('sp500_top10_daily_prices_2026_q1.csv');
+            if (!response.ok) throw new Error("Network response was not ok");
+            const csvText = await response.text();
+            parseCSVText(csvText);
+        } catch (e) {
+            console.error("CSV Load Error:", e);
+            document.getElementById('stockChart').style.display = 'none';
+            document.getElementById('fallbackUI').style.display = 'block';
+        }
+    }
 
-    // 최근 30일 라벨 생성
-    const labels = Array.from({length: 30}, (_, i) => `Day ${i + 1}`);
-
-    // 2. Chart.js 초기화
-    const ctx = document.getElementById('stockChart').getContext('2d');
-    let stockChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Apple (AAPL) 주가',
-                data: generateDummyData(stockBasePrices['AAPL']),
-                borderColor: '#3498db',
-                backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: false
-                }
-            }
+    // 로컬 파일 업로드 이벤트 리스너 추가
+    document.getElementById('csvFileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                document.getElementById('fallbackUI').style.display = 'none';
+                document.getElementById('stockChart').style.display = 'block';
+                parseCSVText(evt.target.result);
+            };
+            reader.readAsText(file);
         }
     });
 
-    // 3. 차트 업데이트 함수
+    function initChart() {
+        const ctx = document.getElementById('stockChart').getContext('2d');
+        if (stockChart) stockChart.destroy();
+        stockChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: globalCsvData.dates,
+                datasets: [{
+                    label: 'Apple (AAPL) 주가',
+                    data: globalCsvData.stocks['AAPL'],
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false
+                    }
+                }
+            }
+        });
+    }
+
     function updateChart(ticker) {
-        const basePrice = stockBasePrices[ticker] || 100;
+        if (!stockChart) return;
+        
+        let csvTicker = ticker === 'BRK.B' ? 'BRK-B' : ticker;
         const selectElement = document.getElementById('stockSelect');
         
-        // select 텍스트 가져오기
         let stockName = ticker;
         for (let option of selectElement.options) {
             if (option.value === ticker) {
@@ -148,40 +183,41 @@
             }
         }
 
-        // 차트 데이터 갱신
         stockChart.data.datasets[0].label = `${stockName} 주가`;
-        stockChart.data.datasets[0].data = generateDummyData(basePrice);
+        stockChart.data.datasets[0].data = globalCsvData.stocks[csvTicker] || [];
         stockChart.update();
     }
 
-    // 4. 드롭다운 변경 이벤트 리스너
     document.getElementById('stockSelect').addEventListener('change', function(e) {
         updateChart(e.target.value);
     });
 
-    // ==========================================
-    // 5. 챗봇을 위한 전역 API (Adapter) 노출
-    // ==========================================
     window.DashboardAPI = {
-        /**
-         * 챗봇에서 주식을 변경할 때 호출할 함수
-         * @param {string} ticker 종목 코드 (예: 'AAPL', 'MSFT')
-         */
         changeStock: function(ticker) {
             const selectElement = document.getElementById('stockSelect');
+            let csvTicker = ticker === 'BRK.B' ? 'BRK-B' : ticker;
             
-            // 유효한 종목 코드인지 확인
-            if (stockBasePrices[ticker]) {
-                selectElement.value = ticker; // UI(드롭다운) 값 변경
-                updateChart(ticker);          // 차트 업데이트
+            if (globalCsvData.stocks[csvTicker]) {
+                selectElement.value = ticker;
+                updateChart(ticker);
                 console.log(`[DashboardAPI] Stock changed to ${ticker}`);
                 return true;
             } else {
                 console.warn(`[DashboardAPI] Invalid ticker: ${ticker}`);
                 return false;
             }
+        },
+        getCurrentData: function() {
+            if (!stockChart) return null;
+            return {
+                label: stockChart.data.datasets[0].label,
+                data: stockChart.data.datasets[0].data
+            };
         }
     };
+
+    // 로드 시작
+    loadCSV();
 </script>
 
 </body>

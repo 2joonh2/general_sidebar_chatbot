@@ -22,7 +22,7 @@ NVIDIA: NVDA
 Meta: META
 Tesla: TSLA
 Berkshire Hathaway: BRK.B
-Eli Lilly: LLY
+Walmart: WMT
 Broadcom: AVGO
 
 Your job is to match the user's input to one of these tickers and return a JSON object ONLY, with no markdown formatting or other text.
