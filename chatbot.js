@@ -22,13 +22,19 @@ NVIDIA: NVDA
 Meta: META
 Tesla: TSLA
 Berkshire Hathaway: BRK.B
-Walmart: WMT
+Eli Lilly: LLY
 Broadcom: AVGO
 
+First, think step-by-step about what the user wants and output each reasoning step as an array of strings in the "thoughtProcess" field.
+Then, determine the action.
 Your job is to match the user's input to one of these tickers and return a JSON object ONLY, with no markdown formatting or other text.
 
 If the user JUST wants to see or change the view (e.g., "보여줘", "바꿔줘"), return:
 {
+    "thoughtProcess": [
+        "사용자가 화면을 변경해 달라고 요청했습니다.",
+        "입력된 종목 기호를 확인하고 매핑합니다."
+    ],
     "action": "changeStock",
     "ticker": "AAPL",
     "message": "Apple 주식 뷰로 변경되었습니다."
@@ -36,6 +42,11 @@ If the user JUST wants to see or change the view (e.g., "보여줘", "바꿔줘"
 
 If the user wants to ANALYZE the stock data (e.g., "분석해줘", "추세가 어때", "데이터 어때"), return:
 {
+    "thoughtProcess": [
+        "사용자가 특정 주식의 데이터 분석을 요청했습니다.",
+        "현재 주가 동향과 패턴을 파악해야 합니다.",
+        "데이터를 바탕으로 분석 액션을 실행하도록 결정합니다."
+    ],
     "action": "analyzeStock",
     "ticker": "AAPL",
     "message": "Apple 주식 데이터를 불러와 분석을 시작합니다..."
@@ -43,6 +54,10 @@ If the user wants to ANALYZE the stock data (e.g., "분석해줘", "추세가 �
 
 If you cannot understand or the stock is not in the list, return:
 {
+    "thoughtProcess": [
+        "입력된 문장에서 적절한 종목이나 의도를 찾을 수 없습니다.",
+        "요청을 수행할 수 없으므로 거절 메시지를 준비합니다."
+    ],
     "action": "none",
     "message": "죄송합니다. 지원하지 않는 종목이거나 이해할 수 없는 명령입니다."
 }
@@ -72,26 +87,41 @@ If you cannot understand or the stock is not in the list, return:
             }
         };
 
+        // 명령 분석 타임아웃: 120초 (관용적 적용)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000);
+
         try {
             const response = await fetch(this.apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
-                console.error("Gemini API Error:", response.status, response.statusText);
-                return { action: "none", message: "API 호출 중 오류가 발생했습니다." };
+                const errorData = await response.json().catch(() => ({}));
+                console.error("Gemini API Error:", response.status, response.statusText, errorData);
+                return { action: "none", message: `API 호출 중 오류가 발생했습니다 (코드: ${response.status}). F12를 눌러 콘솔의 에러 메시지(API 키 등)를 확인해주세요.` };
             }
 
             const data = await response.json();
             const textResponse = data.candidates[0].content.parts[0].text.trim();
             
-            // JSON 파싱 (마크다운 \`\`\`json ... \`\`\` 등이 붙어있을 수 있으므로 제거)
-            const jsonStr = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-            return JSON.parse(jsonStr);
+            // JSON 파싱 (정규식을 사용하여 JSON 블록만 추출, 그 외의 텍스트 무시)
+            const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            } else {
+                throw new Error("JSON format not found in response.");
+            }
             
         } catch (error) {
+            if (error.name === 'AbortError') {
+                console.error("LLM Timeout Error: Request took too long.");
+                return { action: "none", message: "생각이 너무 길어져서 응답을 완료하지 못했습니다 (시간 초과)." };
+            }
             console.error("LLM Parsing Error:", error);
             return { action: "none", message: "응답을 처리하는 중 오류가 발생했습니다." };
         }
@@ -100,16 +130,31 @@ If you cannot understand or the stock is not in the list, return:
     /**
      * 화면에서 추출한 데이터를 바탕으로 데이터 분석을 수행합니다.
      */
-    async generateAnalysis(dbData) {
+    async generateAnalysis(dbData, userQuery = "") {
+        // 1. 데이터 검증 (오류 방지)
+        if (!dbData || !dbData.label || !Array.isArray(dbData.data)) {
+            return "데이터 분석에 필요한 주가 정보가 올바르지 않거나 누락되었습니다.";
+        }
+
         const prompt = `
 You are an expert financial data analyst.
-Analyze the following stock data representing the last 30 days of prices.
+The user has specifically asked: "${userQuery || 'Analyze the data'}"
+Analyze the following stock data representing the recent ${dbData.data.length} periods (e.g., days or months) of prices to answer the user's specific request.
+
 Stock: ${dbData.label}
 Prices: ${dbData.data.join(', ')}
 
-Please provide a short, professional analysis in Korean. Mention the highest and lowest price points, overall trend, and volatility. Keep it to 3-4 sentences. Do NOT output any markdown blocks like \`\`\`json, just pure text.
+First, perform a detailed data analysis internally (identify trends, highest/lowest points, and volatility).
+Then, provide a professional and insightful analysis report in Korean.
+Structure your response starting with "[데이터 분석 결과]".
+Make sure to mention the highest and lowest price points, overall trend, and provide a brief future outlook or summary. 
+Keep it to 4-5 sentences. Do NOT output any markdown blocks like \`\`\`json, just pure text.
 `;
         
+        // 심층 분석 타임아웃: 180초 (3분, 더 긴 분석 시간을 위해 관용적 적용)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 180000);
+
         try {
             const response = await fetch(this.apiUrl, {
                 method: 'POST',
@@ -117,11 +162,31 @@ Please provide a short, professional analysis in Korean. Mention the highest and
                 body: JSON.stringify({
                     contents: [{ role: "user", parts: [{ text: prompt }] }],
                     generationConfig: { temperature: 0.7 }
-                })
+                }),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
+            
+            // 2. API 응답 에러 처리
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("API 응답 에러:", errorData);
+                return "데이터 분석 요청 중 서버 오류가 발생했습니다.";
+            }
+
             const data = await response.json();
-            return data.candidates[0].content.parts[0].text.trim();
+            
+            // 3. 안전한 데이터 추출
+            if (data.candidates && data.candidates.length > 0) {
+                return data.candidates[0].content.parts[0].text.trim();
+            } else {
+                return "분석 결과를 생성할 수 없습니다 (데이터 차단 또는 구조 이상).";
+            }
         } catch (err) {
+            if (err.name === 'AbortError') {
+                console.error("Analysis Timeout Error:", err);
+                return "데이터 분석 과정이 너무 오래 걸려 시간 초과되었습니다.";
+            }
             console.error(err);
             return "데이터 분석 중 오류가 발생했습니다.";
         }
@@ -229,6 +294,20 @@ class DashboardChatbot {
 
         // 로딩 제거
         this.messages.removeChild(loadingBubble);
+
+        // AI의 생각하는 흐름(Thought Process)을 사용자에게 시각적으로 보여주기
+        if (result.thoughtProcess) {
+            const thoughts = Array.isArray(result.thoughtProcess) ? result.thoughtProcess : [result.thoughtProcess];
+            for (const thought of thoughts) {
+                const thoughtBubble = this.appendMessage('bot', `💡 생각: ${thought}`);
+                thoughtBubble.style.fontSize = '0.85em';
+                thoughtBubble.style.opacity = '0.8';
+                thoughtBubble.style.fontStyle = 'italic';
+            }
+        }
+
+        // 액션 함수에서 사용자의 원본 질문을 활용할 수 있도록 결과에 포함
+        result.originalQuery = text;
 
         // 액션 실행
         if (result.action && this.actions[result.action]) {

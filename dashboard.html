@@ -211,6 +211,7 @@
             if (!stockChart) return null;
             return {
                 label: stockChart.data.datasets[0].label,
+                dates: stockChart.data.labels,
                 data: stockChart.data.datasets[0].data
             };
         }
