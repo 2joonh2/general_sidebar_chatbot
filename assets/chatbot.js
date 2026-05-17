@@ -101,6 +101,70 @@ Return format:
     clearHistory() {
         this.chatHistory = [];
     }
+
+    /**
+     * 화면에서 추출한 데이터를 바탕으로 데이터 분석을 수행합니다.
+     */
+    async generateAnalysis(dbData, userQuery = "") {
+        // 1. 데이터 검증 (오류 방지)
+        if (!dbData || !dbData.label || !Array.isArray(dbData.data)) {
+            return "데이터 분석에 필요한 주가 정보가 올바르지 않거나 누락되었습니다.";
+        }
+
+        const prompt = `
+You are an expert financial data analyst.
+The user has specifically asked: "${userQuery || 'Analyze the data'}"
+Analyze the following stock data representing the recent ${dbData.data.length} periods (e.g., days or months) of prices to answer the user's specific request.
+
+Stock: ${dbData.label}
+Prices: ${dbData.data.join(', ')}
+
+First, perform a detailed data analysis internally (identify trends, highest/lowest points, and volatility).
+Then, provide a professional and insightful analysis report in Korean.
+Structure your response starting with "[데이터 분석 결과]".
+Make sure to mention the highest and lowest price points, overall trend, and provide a brief future outlook or summary. 
+Keep it to 4-5 sentences. Do NOT output any markdown blocks like \`\`\`json, just pure text.
+`;
+        
+        const requestBody = {
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7 }
+        };
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+        try {
+            const response = await fetch(this.apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("API 응답 에러:", errorData);
+                return "데이터 분석 요청 중 서버 오류가 발생했습니다.";
+            }
+
+            const data = await response.json();
+            
+            if (data.candidates && data.candidates.length > 0) {
+                return data.candidates[0].content.parts[0].text.trim();
+            } else {
+                return "분석 결과를 생성할 수 없습니다 (데이터 차단 또는 구조 이상).";
+            }
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                console.error("Analysis Timeout Error:", err);
+                return "데이터 분석 과정이 너무 오래 걸려 시간 초과되었습니다.";
+            }
+            console.error(err);
+            return "데이터 분석 중 오류가 발생했습니다.";
+        }
+    }
 }
 
 
@@ -109,6 +173,7 @@ Return format:
 class DashboardChatbot {
     constructor(config) {
         this.llmProvider = config.llmProvider;
+        this.actions = config.actions || {};
         this.initUI();
     }
 
