@@ -1,5 +1,5 @@
 # Build artifacts
-public/
+dist/
 node_modules/
 
 # OS generated files

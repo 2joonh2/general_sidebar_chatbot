@@ -2,21 +2,21 @@ const fs = require('fs');
 const path = require('path');
 
 const RAW_DIR = path.join(__dirname, 'raw_dashboards');
-const PUBLIC_DIR = path.join(__dirname, 'public');
-
+const DIST_DIR = path.join(__dirname, 'dist');
+const DIST_DASHBOARDS_DIR = path.join(DIST_DIR, 'dashboards');
 const ASSETS_DIR = path.join(__dirname, 'assets');
 
-// Ensure public directory exists
-if (!fs.existsSync(PUBLIC_DIR)) {
-    fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+// Ensure directories exist
+if (!fs.existsSync(DIST_DASHBOARDS_DIR)) {
+    fs.mkdirSync(DIST_DASHBOARDS_DIR, { recursive: true });
 }
 
-// Copy static assets
+// Copy static assets to dashboards directory so relative paths work perfectly
 ['chatbot.js', 'chatbot.css', 'sp500_top10_daily_prices_2026_q1.csv'].forEach(file => {
     const srcPath = path.join(ASSETS_DIR, file);
     if (fs.existsSync(srcPath)) {
-        fs.copyFileSync(srcPath, path.join(PUBLIC_DIR, file));
-        console.log(`Copied ${file} to public/`);
+        fs.copyFileSync(srcPath, path.join(DIST_DASHBOARDS_DIR, file));
+        console.log(`Copied ${file} to dist/dashboards/`);
     } else {
         console.warn(`Warning: Asset ${file} not found in assets/ directory.`);
     }
@@ -85,14 +85,14 @@ fs.readdirSync(RAW_DIR).forEach(file => {
             }
         }
 
-        const outPath = path.join(PUBLIC_DIR, file);
+        const outPath = path.join(DIST_DASHBOARDS_DIR, file);
         fs.writeFileSync(outPath, content);
         console.log(`Injected chatbot into: ${file}`);
         processedFiles.push(file);
     }
 });
 
-// Generate index.html
+// Generate index.html in the root of dist/
 const indexContent = `
 <!DOCTYPE html>
 <html lang="ko">
@@ -115,13 +115,13 @@ const indexContent = `
         <h1>📊 대시보드 목록</h1>
         <p>팀원들이 생성한 대시보드(챗봇 자동 주입 완료)에 접속하세요:</p>
         <ul>
-            ${processedFiles.map(f => `<li><a href="${f}">📄 ${f}</a></li>`).join('')}
+            ${processedFiles.map(f => `<li><a href="dashboards/${f}">📄 ${f}</a></li>`).join('')}
         </ul>
     </div>
 </body>
 </html>
 `;
-fs.writeFileSync(path.join(PUBLIC_DIR, 'index.html'), indexContent);
+fs.writeFileSync(path.join(DIST_DIR, 'index.html'), indexContent);
 console.log('Generated index.html (Portal)');
 
 console.log('🎉 Build completed successfully!');
