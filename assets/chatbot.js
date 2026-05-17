@@ -174,7 +174,60 @@ class DashboardChatbot {
     constructor(config) {
         this.llmProvider = config.llmProvider;
         this.actions = config.actions || {};
+        
+        // 챗봇 초기화 시점에 현재 HTML에 등록된 모든 함수들을 스캔하여 프롬프트에 동적 주입
+        this.injectDynamicPrompt();
+        
         this.initUI();
+    }
+
+    /**
+     * 현재 웹페이지의 DOM과 전역 객체를 스캔하여 사용 가능한 액션(메뉴판)을
+     * LLM 시스템 프롬프트에 명시적으로 추가합니다. (할루시네이션 방지)
+     */
+    injectDynamicPrompt() {
+        const registeredActions = Object.keys(this.actions);
+        
+        // 1. DashboardAPI 객체 내부의 함수들 스캔
+        const apiActions = [];
+        if (window.DashboardAPI) {
+            for (const key in window.DashboardAPI) {
+                if (typeof window.DashboardAPI[key] === 'function') {
+                    apiActions.push(key);
+                }
+            }
+        }
+
+        // 2. 순수 전역 커스텀 함수들 스캔 (브라우저 내장 native code 제외)
+        const customGlobalFunctions = [];
+        for (const key in window) {
+            try {
+                if (typeof window[key] === 'function') {
+                    const funcStr = window[key].toString();
+                    // 내장 함수가 아니고, 챗봇 클래스 자체가 아닌 커스텀 함수만 추출
+                    if (!funcStr.includes('[native code]') && 
+                        key !== 'GeminiLlmProvider' && 
+                        key !== 'DashboardChatbot') {
+                        customGlobalFunctions.push(key);
+                    }
+                }
+            } catch(e) {}
+        }
+
+        // 중복 제거 후 하나의 배열로 통합
+        const allAvailableActions = [...new Set([...registeredActions, ...apiActions, ...customGlobalFunctions])];
+
+        const dynamicInstruction = `
+CRITICAL RESTRICTION: You MUST ONLY use the following explicitly available function names in the "action" field:
+[ ${allAvailableActions.length > 0 ? allAvailableActions.join(', ') : 'None'} ]
+
+If the user's request requires an action, choose EXACTLY from the list above. DO NOT invent, guess, or hallucinate any other function names (e.g., do not use 'showStockDetails' unless it is exactly in the list). 
+If the request doesn't match any available actions, use 'generalChat' in the "action" field.
+`;
+        
+        // LLM 프로바이더의 시스템 프롬프트 하단에 메뉴판(명세서) 추가
+        this.llmProvider.systemPrompt += `\n\n${dynamicInstruction}`;
+        console.log("✅ 챗봇 동적 프롬프트 주입 완료 (사용 가능한 함수 목록):", allAvailableActions);
     }
 
     initUI() {
@@ -290,6 +343,10 @@ class DashboardChatbot {
                 else if (typeof window[result.action] === 'function') {
                     actionResult = await window[result.action](result);
                 } 
+                // Case C: DashboardAPI 내부 함수인 경우
+                else if (window.DashboardAPI && typeof window.DashboardAPI[result.action] === 'function') {
+                    actionResult = await window.DashboardAPI[result.action](result);
+                }
                 else {
                     console.warn(`명령어 실행 실패: '${result.action}' 함수를 찾을 수 없습니다.`);
                 }
