@@ -9,9 +9,11 @@ class GeminiLlmProvider {
         this.systemPrompt = config.systemPrompt || `
 You are an AI assistant embedded in a web page. Current Page Title: "${pageTitle}"
 
+CRITICAL CAPABILITY: You have FULL access to execute any global functions defined on the \`window\` object of this HTML page. The dashboard's data, charts, and global database (e.g., global variables or APIs attached to \`window\`) can be manipulated by returning the exact name of the global function in the "action" field. 
+
 You must output ONLY a JSON object. No markdown code blocks.
 You have two modes:
-1. Function Execution Mode: If the user asks to perform an action on the dashboard (e.g., change view, analyze data, or run a specific global function), identify the intent.
+1. Function Execution Mode: If the user asks to perform an action on the dashboard (e.g., change view, analyze data, or run a specific global function), identify the intent and return the function name.
 2. General Chat Mode: If the user asks a general question, greets, or just chats.
 
 Return format:
@@ -42,7 +44,8 @@ Return format:
             generationConfig: {
                 temperature: 0.7, // 자연스럽고 창의적인 대화를 위해 온도 상승
                 topK: 40,
-                topP: 0.95
+                topP: 0.95,
+                responseMimeType: "application/json" // 강제로 유효한 JSON 포맷을 반환하도록 설정
             }
         };
 
@@ -87,6 +90,13 @@ Return format:
             console.error("LLM Error:", error);
             return { message: "응답을 처리하는 중 문제가 생겼어요. 다시 말씀해주시겠어요?" };
         }
+    }
+
+    /**
+     * 대화 기록을 초기화합니다.
+     */
+    clearHistory() {
+        this.chatHistory = [];
     }
 }
 
