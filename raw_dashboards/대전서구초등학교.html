@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>대전 서구 초등학교 ATTB 대시보드</title>
 
+  <link rel="stylesheet" href="chatbot.css" />
   <style>
     * {
       box-sizing: border-box;
@@ -219,7 +220,16 @@
     // =============================
     // 대시보드 갱신 함수 (전역)
     // =============================
-    window.updateDashboard = function () {
+    window.updateDashboard = function (schoolName, attbName) {
+      if (schoolName) {
+        window.selectedSchool = schoolName;
+        schoolSelect.value = schoolName;
+      }
+      if (attbName) {
+        window.selectedAttb = attbName;
+        attbSelect.value = attbName;
+      }
+
       const school = window.schoolData.find(
         item => item['학교명'] === window.selectedSchool
       );
@@ -228,25 +238,25 @@
         schoolNameEl.textContent = '학교 정보를 찾을 수 없습니다.';
         attbTitleEl.textContent = '';
         attbValueEl.textContent = '';
-        return;
+        return '학교 정보를 찾을 수 없습니다.';
       }
 
       schoolNameEl.textContent = window.selectedSchool;
       attbTitleEl.textContent = window.selectedAttb;
       attbValueEl.textContent = school[window.selectedAttb] || '-';
+
+      return `[대시보드 업데이트 완료] ${window.selectedSchool}의 ${window.selectedAttb} 정보는 '${school[window.selectedAttb] || '-'}' 입니다.`;
     };
 
     // =============================
     // 이벤트 등록
     // =============================
     schoolSelect.addEventListener('change', (e) => {
-      window.selectedSchool = e.target.value;
-      window.updateDashboard();
+      window.updateDashboard(e.target.value, null);
     });
 
     attbSelect.addEventListener('change', (e) => {
-      window.selectedAttb = e.target.value;
-      window.updateDashboard();
+      window.updateDashboard(null, e.target.value);
     });
 
     // =============================
@@ -254,6 +264,59 @@
     // =============================
     initializeDropdowns();
     window.updateDashboard();
+
+    // =============================
+    // 전역 API (챗봇 데이터 조회용)
+    // =============================
+    window.DashboardAPI = {
+      getCurrentData: function() {
+        const school = window.schoolData.find(item => item['학교명'] === window.selectedSchool);
+        return {
+          label: `${window.selectedSchool} - ${window.selectedAttb}`,
+          data: [school ? school[window.selectedAttb] : null]
+        };
+      }
+    };
+  </script>
+
+  <!-- 챗봇 리소스 로드 및 초기화 -->
+  <script src="chatbot.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const systemPrompt = `
+You are an AI assistant embedded in the "대전 서구 초등학교 ATTB 대시보드" web page.
+You have the ability to update the dashboard based on the user's questions.
+
+CRITICAL INSTRUCTION:
+You MUST output ONLY a valid JSON object. No markdown formatting (\`\`\`json ... \`\`\`).
+When a user asks about a school's attribute (e.g., "대전샘머리초등학교 학생 수 알려줘"), you must use the "updateDashboard" action and provide "schoolName" and "attbName" parameters based on user's query.
+
+JSON Format:
+{
+  "thoughtProcess": ["Identify user intent", "Select action"],
+  "action": "updateDashboard",
+  "schoolName": "대전샘머리초등학교",
+  "attbName": "학생 수",
+  "message": "응답을 위한 친절한 한국어 텍스트"
+}
+If no specific dashboard action is needed, use "generalChat" for the action field.
+`;
+
+      const geminiProvider = new GeminiLlmProvider({
+        apiKey: 'AIzaSyCm3yBFjXDuTDJ5A1vGt-30G88zET21gOk', // 사용자의 API 키를 여기에 입력하세요
+        model: 'gemini-2.5-flash',
+        systemPrompt: systemPrompt
+      });
+
+      const bot = new DashboardChatbot({
+        llmProvider: geminiProvider,
+        actions: {
+          updateDashboard: (params) => {
+            return window.updateDashboard(params.schoolName, params.attbName);
+          }
+        }
+      });
+    });
   </script>
 </body>
 </html>
