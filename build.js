@@ -4,16 +4,21 @@ const path = require('path');
 const RAW_DIR = path.join(__dirname, 'raw_dashboards');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
+const ASSETS_DIR = path.join(__dirname, 'assets');
+
 // Ensure public directory exists
 if (!fs.existsSync(PUBLIC_DIR)) {
     fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 }
 
 // Copy static assets
-['chatbot.js', 'chatbot.css'].forEach(file => {
-    if (fs.existsSync(file)) {
-        fs.copyFileSync(file, path.join(PUBLIC_DIR, file));
+['chatbot.js', 'chatbot.css', 'sp500_top10_daily_prices_2026_q1.csv'].forEach(file => {
+    const srcPath = path.join(ASSETS_DIR, file);
+    if (fs.existsSync(srcPath)) {
+        fs.copyFileSync(srcPath, path.join(PUBLIC_DIR, file));
         console.log(`Copied ${file} to public/`);
+    } else {
+        console.warn(`Warning: Asset ${file} not found in assets/ directory.`);
     }
 });
 

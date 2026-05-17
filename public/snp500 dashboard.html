@@ -3,13 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>S&P 500 AI Dashboard</title>
+    <title>S&P 500 Top 10 Dashboard</title>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <!-- 챗봇 스타일 연동 (Phase 2) -->
-    <link rel="stylesheet" href="chatbot.css">
-
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -42,18 +38,6 @@
             outline: none;
             width: 250px;
         }
-        .prompt-settings {
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #eef2f5;
-            border-radius: 8px;
-            border: 1px solid #dcdcdc;
-        }
-        .prompt-settings h3 {
-            margin-top: 0;
-            font-size: 16px;
-            color: #34495e;
-        }
         .chart-container {
             position: relative;
             height: 50vh;
@@ -64,7 +48,7 @@
 <body>
 
 <div class="container">
-    <h1>📊 S&P 500 Top 10 주식 대시보드 (with AI Chatbot)</h1>
+    <h1>📊 S&P 500 Top 10 주식 대시보드</h1>
     
     <div class="controls">
         <label for="stockSelect"><strong>종목 선택:</strong> </label>
@@ -82,16 +66,6 @@
         </select>
     </div>
 
-    <!-- 챗봇 시스템 프롬프트 설정 UI -->
-    <div class="prompt-settings">
-        <h3>⚙️ 챗봇 시스템 프롬프트 설정 (일반 사용자 편집용)</h3>
-        <textarea id="systemPromptInput" style="width: 100%; height: 100px; padding: 10px; font-family: inherit; border: 1px solid #ccc; border-radius: 5px; resize: vertical; box-sizing: border-box;"></textarea>
-        <div style="margin-top: 10px;">
-            <button id="savePromptBtn" style="padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">프롬프트 적용</button>
-            <span id="promptSaveMsg" style="color: #27ae60; font-weight: bold; margin-left: 10px; display: none;">✅ 적용되었습니다.</span>
-        </div>
-    </div>
-
     <div class="chart-container">
         <canvas id="stockChart"></canvas>
         <div id="fallbackUI" style="display: none; text-align: center; padding-top: 50px; background: #fff;">
@@ -102,9 +76,6 @@
     </div>
 </div>
 
-<!-- ============================================== -->
-<!-- 1. 기존 대시보드 로직 (Phase 1)                -->
-<!-- ============================================== -->
 <script>
     let globalCsvData = { dates: [], stocks: {} };
     let stockChart = null;
@@ -250,69 +221,47 @@
     loadCSV();
 </script>
 
+
 <!-- ============================================== -->
-<!-- 2. 챗봇 연동 및 초기화 (Phase 3)               -->
+<!-- 🤖 Auto-injected Chatbot by Build System       -->
 <!-- ============================================== -->
+<link rel="stylesheet" href="chatbot.css">
 <script src="chatbot.js"></script>
 <script>
-    // 페이지 로드 시 챗봇 초기화
     window.addEventListener('DOMContentLoaded', () => {
-        
-        // 1. Gemini 프로바이더 생성 (발급받은 API 키 입력)
-        const geminiProvider = new GeminiLlmProvider({
-            apiKey: 'AIzaSyCm3yBFjXDuTDJ5A1vGt-30G88zET21gOk', // 사용자의 API 키
-            model: 'gemini-2.5-flash'
-        });
+        if (typeof GeminiLlmProvider !== 'undefined') {
+            const geminiProvider = new GeminiLlmProvider({
+                // TODO: Replace with secure API endpoint in production
+                apiKey: 'AIzaSyCm3yBFjXDuTDJ5A1vGt-30G88zET21gOk', 
+                model: 'gemini-2.5-flash'
+            });
 
-        // 2. 챗봇 인스턴스 생성 및 대시보드 API 맵핑
-        const bot = new DashboardChatbot({
-            llmProvider: geminiProvider,
-            actions: {
-                // 단순 뷰 변경
-                'changeStock': (params) => {
-                    window.DashboardAPI.changeStock(params.ticker);
-                },
-                // 뷰 변경 후 데이터 분석
-                'analyzeStock': async (params) => {
-                    // 1. 뷰 변경 (조회 조건 설정 = DB 쿼리 실행 효과)
-                    window.DashboardAPI.changeStock(params.ticker);
-                    
-                    // 2. 현재 뷰의 데이터 읽어오기 (DB 조회 결과물)
-                    const dbData = window.DashboardAPI.getCurrentData();
-                    
-                    // 3. 로딩 메시지 표시
-                    const loadingBubble = bot.appendMessage('bot loading', 'DB에서 데이터를 읽어와 분석 중입니다...');
-                    
-                    // 4. LLM에 데이터 분석 요청
-                    const analysisText = await geminiProvider.generateAnalysis(dbData);
-                    
-                    // 5. 로딩 메시지 제거 후 결과 반환
-                    bot.messages.removeChild(loadingBubble);
-                    return analysisText; // 반환된 텍스트가 최종 응답으로 채팅창에 뜹니다.
+            const bot = new DashboardChatbot({
+                llmProvider: geminiProvider,
+                actions: {
+                    'changeStock': (params) => {
+                        if (window.DashboardAPI && window.DashboardAPI.changeStock) {
+                            window.DashboardAPI.changeStock(params.ticker);
+                        } else {
+                            console.warn('DashboardAPI.changeStock is not implemented in this HTML.');
+                        }
+                    },
+                    'analyzeStock': async (params) => {
+                        if (window.DashboardAPI && window.DashboardAPI.changeStock && window.DashboardAPI.getCurrentData) {
+                            window.DashboardAPI.changeStock(params.ticker);
+                            const dbData = window.DashboardAPI.getCurrentData();
+                            const loadingBubble = bot.appendMessage('bot loading', '데이터 분석 중...');
+                            const analysisText = await geminiProvider.generateAnalysis(dbData);
+                            bot.messages.removeChild(loadingBubble);
+                            return analysisText;
+                        }
+                        return "이 대시보드에서는 데이터 분석 기능을 지원하지 않습니다 (DashboardAPI 누락).";
+                    }
                 }
-            }
-        });
-
-        // 3. 시스템 프롬프트 설정 UI 연동
-        const promptInput = document.getElementById('systemPromptInput');
-        const saveBtn = document.getElementById('savePromptBtn');
-        const saveMsg = document.getElementById('promptSaveMsg');
-
-        // 초기 프롬프트 값을 텍스트 박스에 채워넣기
-        promptInput.value = geminiProvider.systemPrompt;
-
-        // 적용 버튼 클릭 시 프롬프트 업데이트
-        saveBtn.addEventListener('click', () => {
-            geminiProvider.setSystemPrompt(promptInput.value);
-            
-            // 성공 메시지 잠시 보여주기
-            saveMsg.style.display = 'inline';
-            setTimeout(() => {
-                saveMsg.style.display = 'none';
-            }, 2000);
-        });
+            });
+            console.log('✅ Chatbot successfully embedded!');
+        }
     });
 </script>
-
 </body>
 </html>

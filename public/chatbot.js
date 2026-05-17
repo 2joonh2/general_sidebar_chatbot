@@ -1,7 +1,10 @@
 // 1. GeminiLlmProvider 클래스의 프롬프트 수정
 class GeminiLlmProvider {
     constructor(config) {
-        // ... (앞부분 동일)
+        this.apiKey = config.apiKey;
+        this.model = config.model || 'gemini-2.5-flash';
+        this.apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+        
         this.chatHistory = []; 
         const pageTitle = document.title || "웹페이지";
 
