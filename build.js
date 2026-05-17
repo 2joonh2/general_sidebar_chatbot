@@ -1,3 +1,4 @@
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
@@ -10,6 +11,9 @@ const ASSETS_DIR = path.join(__dirname, 'assets');
 if (!fs.existsSync(DIST_DASHBOARDS_DIR)) {
     fs.mkdirSync(DIST_DASHBOARDS_DIR, { recursive: true });
 }
+
+// Get API Key from environment variable
+const apiKey = process.env.GEMINI_API_KEY || 'YOUR_API_KEY_HERE';
 
 // Copy static assets to dashboards directory so relative paths work perfectly
 ['chatbot.js', 'chatbot.css', 'sp500_top10_daily_prices_2026_q1.csv'].forEach(file => {
@@ -33,8 +37,7 @@ const CHATBOT_INJECTION = `
     window.addEventListener('DOMContentLoaded', () => {
         if (typeof GeminiLlmProvider !== 'undefined') {
             const geminiProvider = new GeminiLlmProvider({
-                // TODO: Replace with secure API endpoint in production
-                apiKey: 'AIzaSyCm3yBFjXDuTDJ5A1vGt-30G88zET21gOk', 
+                apiKey: '${apiKey}', 
                 model: 'gemini-2.5-flash'
             });
 
