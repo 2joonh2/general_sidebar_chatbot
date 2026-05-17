@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S&P 500 Top 10 Dashboard</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select {
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            outline: none;
+            width: 250px;
+        }
+        .chart-container {
+            position: relative;
+            height: 50vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📊 S&P 500 Top 10 주식 대시보드</h1>
+    
+    <div class="controls">
+        <label for="stockSelect"><strong>종목 선택:</strong> </label>
+        <select id="stockSelect">
+            <option value="AAPL">Apple (AAPL)</option>
+            <option value="MSFT">Microsoft (MSFT)</option>
+            <option value="GOOGL">Alphabet (GOOGL)</option>
+            <option value="AMZN">Amazon (AMZN)</option>
+            <option value="NVDA">NVIDIA (NVDA)</option>
+            <option value="META">Meta (META)</option>
+            <option value="TSLA">Tesla (TSLA)</option>
+            <option value="BRK.B">Berkshire Hathaway (BRK.B)</option>
+            <option value="WMT">Walmart (WMT)</option>
+            <option value="AVGO">Broadcom (AVGO)</option>
+        </select>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="stockChart"></canvas>
+        <div id="fallbackUI" style="display: none; text-align: center; padding-top: 50px; background: #fff;">
+            <h3 style="color: #e74c3c; margin-bottom: 10px;">⚠️ 데이터 로드 실패 (CORS 정책)</h3>
+            <p style="margin-bottom: 15px;">브라우저 보안 정책으로 인해 로컬(file://) 환경에서 자동으로 CSV를 읽을 수 없습니다.<br>VS Code Live Server를 사용하시거나, 아래 버튼을 눌러 직접 CSV 파일을 선택해주세요.</p>
+            <input type="file" id="csvFileInput" accept=".csv" style="width: auto; padding: 5px;" />
+        </div>
+    </div>
+</div>
+
+<script>
+    let globalCsvData = { dates: [], stocks: {} };
+    let stockChart = null;
+
+    function parseCSVText(csvText) {
+        const rows = csvText.trim().split('\n');
+        const headers = rows[0].split(',').map(h => h.trim());
+        
+        globalCsvData.dates = [];
+        headers.forEach((header, index) => {
+            if (index > 0) {
+                globalCsvData.stocks[header] = [];
+            }
+        });
+
+        for (let i = 1; i < rows.length; i++) {
+            const cols = rows[i].split(',');
+            if (cols.length === headers.length) {
+                globalCsvData.dates.push(cols[0].trim());
+                headers.forEach((header, index) => {
+                    if (index > 0) {
+                        globalCsvData.stocks[header].push(parseFloat(cols[index]));
+                    }
+                });
+            }
+        }
+        
+        initChart();
+    }
+
+    // CSV 데이터 로드 및 파싱
+    async function loadCSV() {
+        try {
+            const response = await fetch('sp500_top10_daily_prices_2026_q1.csv');
+            if (!response.ok) throw new Error("Network response was not ok");
+            const csvText = await response.text();
+            parseCSVText(csvText);
+        } catch (e) {
+            console.error("CSV Load Error:", e);
+            document.getElementById('stockChart').style.display = 'none';
+            document.getElementById('fallbackUI').style.display = 'block';
+        }
+    }
+
+    // 로컬 파일 업로드 이벤트 리스너 추가
+    document.getElementById('csvFileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                document.getElementById('fallbackUI').style.display = 'none';
+                document.getElementById('stockChart').style.display = 'block';
+                parseCSVText(evt.target.result);
+            };
+            reader.readAsText(file);
+        }
+    });
+
+    function initChart() {
+        const ctx = document.getElementById('stockChart').getContext('2d');
+        if (stockChart) stockChart.destroy();
+        stockChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: globalCsvData.dates,
+                datasets: [{
+                    label: 'Apple (AAPL) 주가',
+                    data: globalCsvData.stocks['AAPL'],
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false
+                    }
+                }
+            }
+        });
+    }
+
+    function updateChart(ticker) {
+        if (!stockChart) return;
+        
+        let csvTicker = ticker === 'BRK.B' ? 'BRK-B' : ticker;
+        const selectElement = document.getElementById('stockSelect');
+        
+        let stockName = ticker;
+        for (let option of selectElement.options) {
+            if (option.value === ticker) {
+                stockName = option.text;
+                break;
+            }
+        }
+
+        stockChart.data.datasets[0].label = `${stockName} 주가`;
+        stockChart.data.datasets[0].data = globalCsvData.stocks[csvTicker] || [];
+        stockChart.update();
+    }
+
+    document.getElementById('stockSelect').addEventListener('change', function(e) {
+        updateChart(e.target.value);
+    });
+
+    window.DashboardAPI = {
+        changeStock: function(ticker) {
+            const selectElement = document.getElementById('stockSelect');
+            let csvTicker = ticker === 'BRK.B' ? 'BRK-B' : ticker;
+            
+            if (globalCsvData.stocks[csvTicker]) {
+                selectElement.value = ticker;
+                updateChart(ticker);
+                console.log(`[DashboardAPI] Stock changed to ${ticker}`);
+                return true;
+            } else {
+                console.warn(`[DashboardAPI] Invalid ticker: ${ticker}`);
+                return false;
+            }
+        },
+        getCurrentData: function() {
+            if (!stockChart) return null;
+            return {
+                label: stockChart.data.datasets[0].label,
+                dates: stockChart.data.labels,
+                data: stockChart.data.datasets[0].data
+            };
+        }
+    };
+
+    // 로드 시작
+    loadCSV();
+</script>
+
+
+<!-- ============================================== -->
+<!-- 🤖 Auto-injected Chatbot by Build System       -->
+<!-- ============================================== -->
+<link rel="stylesheet" href="chatbot.css">
+<script src="chatbot.js"></script>
+<script>
+    window.addEventListener('DOMContentLoaded', () => {
+        if (typeof GeminiLlmProvider !== 'undefined') {
+            const geminiProvider = new GeminiLlmProvider({
+                // TODO: Replace with secure API endpoint in production
+                apiKey: 'AIzaSyCm3yBFjXDuTDJ5A1vGt-30G88zET21gOk', 
+                model: 'gemini-2.5-flash'
+            });
+
+            const bot = new DashboardChatbot({
+                llmProvider: geminiProvider,
+                actions: {
+                    'changeStock': (params) => {
+                        if (window.DashboardAPI && window.DashboardAPI.changeStock) {
+                            window.DashboardAPI.changeStock(params.ticker);
+                        } else {
+                            console.warn('DashboardAPI.changeStock is not implemented in this HTML.');
+                        }
+                    },
+                    'analyzeStock': async (params) => {
+                        if (window.DashboardAPI && window.DashboardAPI.changeStock && window.DashboardAPI.getCurrentData) {
+                            window.DashboardAPI.changeStock(params.ticker);
+                            const dbData = window.DashboardAPI.getCurrentData();
+                            const loadingBubble = bot.appendMessage('bot loading', '데이터 분석 중...');
+                            const analysisText = await geminiProvider.generateAnalysis(dbData);
+                            bot.messages.removeChild(loadingBubble);
+                            return analysisText;
+                        }
+                        return "이 대시보드에서는 데이터 분석 기능을 지원하지 않습니다 (DashboardAPI 누락).";
+                    }
+                }
+            });
+            console.log('✅ Chatbot successfully embedded!');
+        }
+    });
+</script>
+</body>
+</html>
