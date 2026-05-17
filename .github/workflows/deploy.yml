@@ -28,6 +28,9 @@ jobs:
         with:
           node-version: 20
           
+      - name: Install Dependencies
+        run: npm install
+        
       - name: Build Dashboards (Inject Chatbot)
         run: npm run build
         env:
