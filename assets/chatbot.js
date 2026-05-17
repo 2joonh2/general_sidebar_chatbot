@@ -217,13 +217,29 @@ class DashboardChatbot {
         // 중복 제거 후 하나의 배열로 통합
         const allAvailableActions = [...new Set([...registeredActions, ...apiActions, ...customGlobalFunctions])];
 
-        const dynamicInstruction = `
+        // 3. 페이지 내의 select 옵션들 (티커 매핑용) 스캔
+        const selectOptions = [];
+        try {
+            const selects = document.querySelectorAll('select');
+            selects.forEach(select => {
+                for (const option of select.options) {
+                    // 예: "Microsoft (MSFT): MSFT"
+                    selectOptions.push(`${option.text}: ${option.value}`);
+                }
+            });
+        } catch(e) { console.error("Dropdown scan error", e); }
+
+        let dynamicInstruction = `
 CRITICAL RESTRICTION: You MUST ONLY use the following explicitly available function names in the "action" field:
 [ ${allAvailableActions.length > 0 ? allAvailableActions.join(', ') : 'None'} ]
 
 If the user's request requires an action, choose EXACTLY from the list above. DO NOT invent, guess, or hallucinate any other function names (e.g., do not use 'showStockDetails' unless it is exactly in the list). 
 If the request doesn't match any available actions, use 'generalChat' in the "action" field.
 `;
+
+        if (selectOptions.length > 0) {
+            dynamicInstruction += `\nCRITICAL TICKER MAPPING: When extracting a "ticker", you MUST use the exact value from the right side of the colon below based on the user's input:\n${selectOptions.join('\n')}\n`;
+        }
         
         // LLM 프로바이더의 시스템 프롬프트 하단에 메뉴판(명세서) 추가
         this.llmProvider.systemPrompt += `\n\n${dynamicInstruction}`;
