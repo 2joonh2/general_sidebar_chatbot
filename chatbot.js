@@ -1,46 +1,28 @@
-// chatbot.js
-
-/**
- * Gemini API 통신을 담당하는 Provider 클래스 (General Chatbot 버전)
- */
+// 1. GeminiLlmProvider 클래스의 프롬프트 수정
 class GeminiLlmProvider {
     constructor(config) {
-        this.apiKey = config.apiKey;
-        this.model = config.model || 'gemini-2.5-flash';
-        this.apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
-        
-        // [핵심 추가] 챗봇의 기억력을 담당할 배열
+        // ... (앞부분 동일)
         this.chatHistory = []; 
-        
         const pageTitle = document.title || "웹페이지";
 
-        // 범용 대화를 위한 시스템 프롬프트
+        // [수정됨] 대화와 함수 실행을 모두 지원하는 하이브리드 프롬프트
         this.systemPrompt = config.systemPrompt || `
-You are a friendly, knowledgeable, and highly capable AI assistant embedded in a web page.
-Current Page Title: "${pageTitle}"
+You are an AI assistant embedded in a web page. Current Page Title: "${pageTitle}"
 
-Your primary goal is to engage in natural, helpful conversations with the user. You can answer general knowledge questions, assist with coding, summarize text, or just chat.
+You must output ONLY a JSON object. No markdown code blocks.
+You have two modes:
+1. Function Execution Mode: If the user asks to perform an action on the dashboard (e.g., change view, analyze data, or run a specific global function), identify the intent.
+2. General Chat Mode: If the user asks a general question, greets, or just chats.
 
-CRITICAL INSTRUCTION:
-You MUST output ONLY a valid JSON object. No markdown code blocks (like \`\`\`json) outside the JSON structure.
-Format your response exactly like this:
+Return format:
 {
-    "thoughtProcess": [
-        "1. 질문의 의도를 파악합니다.",
-        "2. 어떤 정보를 제공할지 생각합니다."
-    ],
-    "message": "사용자에게 전달할 실제 한국어 답변. 여기에 자연스럽고 친절하게 대답하세요. 줄바꿈이나 간단한 마크다운 기호를 써도 좋습니다."
+    "thoughtProcess": ["Reasoning step 1", "Reasoning step 2"],
+    "action": "The name of the function to execute (e.g., 'changeStock', 'myGlobalFunction'). Use 'generalChat' if no action is needed.",
+    "ticker": "Extract ticker if applicable, otherwise omit",
+    "message": "사용자에게 보여줄 친절한 한국어 응답 메시지"
 }
         `;
     }
-
-    /**
-     * 대화 기록을 초기화하는 함수 (필요시 호출)
-     */
-    clearHistory() {
-        this.chatHistory = [];
-    }
-
     /**
      * 사용자의 입력을 분석하고 대화 문맥을 포함하여 응답을 반환합니다.
      */
@@ -108,9 +90,9 @@ Format your response exactly like this:
     }
 }
 
-/**
- * 대시보드 챗봇 UI 클래스
- */
+
+
+// 2. DashboardChatbot 클래스의 sendMessage 로직 수정
 class DashboardChatbot {
     constructor(config) {
         this.llmProvider = config.llmProvider;
@@ -194,8 +176,7 @@ class DashboardChatbot {
         this.messages.scrollTop = this.messages.scrollHeight;
         return bubble;
     }
-
-    async sendMessage() {
+   async sendMessage() {
         const text = this.input.value.trim();
         if (!text) return;
 
@@ -203,9 +184,7 @@ class DashboardChatbot {
         this.input.value = '';
 
         const loadingBubble = this.appendMessage('bot loading', '생각하는 중...');
-
         const result = await this.llmProvider.analyzeCommand(text);
-
         this.messages.removeChild(loadingBubble);
 
         if (result.thoughtProcess) {
@@ -218,7 +197,38 @@ class DashboardChatbot {
             }
         }
 
-        // Action 분기 없이 무조건 AI가 작성한 message를 출력
+        result.originalQuery = text;
+
+        // [수정됨] 전역 함수 및 내부 액션 실행 로직 부활
+        if (result.action && result.action !== 'generalChat' && result.action !== 'none') {
+            try {
+                let actionResult = null;
+
+                // Case A: 챗봇 생성 시 등록한 내부 actions 객체에 해당 함수가 있는 경우
+                if (this.actions && typeof this.actions[result.action] === 'function') {
+                    actionResult = await this.actions[result.action](result);
+                } 
+                // Case B: HTML 웹 페이지에 선언된 전역 함수(Global Function)인 경우
+                else if (typeof window[result.action] === 'function') {
+                    actionResult = await window[result.action](result);
+                } 
+                else {
+                    console.warn(`명령어 실행 실패: '${result.action}' 함수를 찾을 수 없습니다.`);
+                }
+
+                // 함수에서 명시적으로 텍스트를 반환했다면 해당 텍스트를 봇 응답으로 출력
+                if (typeof actionResult === 'string' && actionResult.length > 0) {
+                    this.appendMessage('bot', actionResult);
+                    return;
+                }
+            } catch (err) {
+                console.error("Action Execution Error:", err);
+                this.appendMessage('bot', '명령(함수)을 실행하는 중 오류가 발생했습니다.');
+                return; // 에러 발생 시 여기서 종료
+            }
+        }
+
+        // 함수 실행 후 반환값이 없거나, 일반 대화(generalChat)인 경우 기본 메시지 출력
         this.appendMessage('bot', result.message || '요청을 처리했습니다.');
     }
 }
