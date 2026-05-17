@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User A Dashboard</title>
+</head>
+<body>
+    <h1>User A's Simple Dashboard</h1>
+    <p>This is a pure HTML file with no chatbot code inside.</p>
+    
+    <script>
+        // Mock Dashboard API for the chatbot to hook into
+        window.DashboardAPI = {
+            changeStock: function(ticker) {
+                console.log("Stock changed to: " + ticker);
+                document.body.innerHTML += "<br>Changed view to " + ticker;
+            },
+            getCurrentData: function() {
+                return {
+                    label: "Mock Stock",
+                    data: [100, 105, 110]
+                };
+            }
+        };
+    </script>
+</body>
+</html>
